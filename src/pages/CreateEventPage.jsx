@@ -32,43 +32,31 @@ const CreateEventPage = () => {
   // Uczestnicy: to będzie tablica obiektów typu { id, name }
   const [participants, setParticipants] = useState([]);
 
-  // Przykładowa lista znajomych – w przyszłości zamień na pobranie z kontekstu/REST API
-  const [friendsList, setFriendsList] = useState([]);
+const { friends } = useEvents(); 
 
-  useEffect(() => {
-    // Załóżmy, że w przyszłości będziemy pobierać z API lub z innego kontekstu.
-    // Tutaj dla demo używamy statycznej listy:
-    const demoFriends = [
-      { id: 1, name: "Damian Ch." },
-      { id: 2, name: "Wiktoria S." },
-      { id: 3, name: "Adrianna K." },
-      { id: 4, name: "Adrian M." },
-      { id: 5, name: "Sebastian S." },
-      { id: 6, name: "Maja T." },
-      // Możesz dodać więcej… lub później podmienić na realne dane z back-end
-    ];
-    setFriendsList(demoFriends);
-  }, []);
 
-  const handleSubmit = (e) => {
+const friendsOptions = friends.map(f => ({
+  id:   f.uid,      // ← UID zamiast email
+  name: f.email,    // ← e-mail dla wygody UI
+}));
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!name.trim()) {
       alert("Proszę podać nazwę wydarzenia.");
       return;
     }
-
-    // Tworzymy nowy event z wybranymi uczestnikami
-    // Zakładamy, że createEvent akceptuje participants jako tablicę obiektów {id, name}
-    const newId = createEvent({
-      name: name.trim(),
-      date,
-      participants,
-      // ew. dodaj inne pola, np. owner: user.id
-    });
-
-    // Przekierowanie na szczegóły eventu
-    navigate(`/event/${newId}`);
+    try {
+      const newId = await createEvent({
+        name: name.trim(),
+        date,                                  // jeśli backend zapisuje tę kolumnę
+        participants: participants.map(p => p.id)
+      });
+      navigate(`/event/${newId}`);
+    } catch (err) {
+      console.error("createEvent error:", err);
+      alert("Nie udało się stworzyć wydarzenia.");
+    }
   };
 
   return (
@@ -137,8 +125,9 @@ const CreateEventPage = () => {
         {/* Autocomplete do wyboru uczestników */}
         <Autocomplete
           multiple
-          options={friendsList}
+          options={friendsOptions}
           getOptionLabel={(option) => option.name}
+          filterSelectedOptions          
           value={participants}
           onChange={(event, newValue) => {
             setParticipants(newValue);

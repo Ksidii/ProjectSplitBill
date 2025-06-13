@@ -14,7 +14,7 @@ import SignInPage from "./pages/SignInPage";
 import Dashboard from "./pages/Dashboard";
 import CreateEventPage from "./pages/CreateEventPage";
 import EventDetailsPage from "./pages/EventDetailsPage";
-import AboutPage from "./pages/AboutPage"; // <-- importujemy AboutPage
+import AboutPage from "./pages/AboutPage"; 
 
 import "./App.css";
 

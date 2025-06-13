@@ -1,5 +1,5 @@
-// src/pages/Dashboard.jsx
-import React from "react";
+
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -11,54 +11,77 @@ import {
   Paper,
   List,
   ListItem,
-  ListItemAvatar,
   ListItemText,
   Avatar,
   Divider,
   ButtonBase,
+  TextField,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useEvents } from "../context/EventContext";
+import LoadingScreen from "../components/LoadingScreen";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { events } = useEvents();
+  const { events, friends, addFriend, reloadFriends, eventsLoaded } = useEvents();
 
-  const userName = user?.username || "Użytkowniku";
+  const [newFriendEmail, setNewFriendEmail] = useState("");
+  const [adding, setAdding] = useState(false);
+const [loading, setLoading] = useState(true);
 
-  // Dzisiaj bez godziny (porównanie wyłącznie dat)
+useEffect(() => {
+  if (events.length) {
+    setLoading(false);  
+  }
+}, [events]);
+
+if (!eventsLoaded) return <LoadingScreen />;
+
+
+  const handleAddFriend = async () => {
+    const email = newFriendEmail.trim().toLowerCase();
+    if (!email) return;
+
+    setAdding(true);
+    try {
+
+      await addFriend(email);
+      setNewFriendEmail("");
+    } catch (err) {
+      console.error("Błąd dodawania znajomego:", err);
+      alert(err.message || "Nie udało się dodać znajomego.");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+
+
+ 
+  const userName = user?.displayName || user?.email || "Użytkowniku";
+
+  
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Filtrujemy wydarzenia: trwające (data >= dziś) i zakończone (data < dziś)
+
   const ongoingEvents = events.filter((e) => {
-    const eventDate = new Date(e.date);
-    eventDate.setHours(0, 0, 0, 0);
-    return eventDate >= today;
+    const d = new Date(e.date);
+    d.setHours(0, 0, 0, 0);
+    return d >= today;
   });
   const completedEvents = events.filter((e) => {
-    const eventDate = new Date(e.date);
-    eventDate.setHours(0, 0, 0, 0);
-    return eventDate < today;
+    const d = new Date(e.date);
+    d.setHours(0, 0, 0, 0);
+    return d < today;
   });
 
-  // Przykładowa lista znajomych (na razie statyczna)
-  const friends = [
-    { id: 1, name: "Damian Ch.", avatar: "/images/friend1.jpg" },
-    { id: 2, name: "Wiktoria S.", avatar: "/images/friend2.jpg" },
-    { id: 3, name: "Adrianna K.", avatar: "/images/friend3.jpg" },
-    { id: 4, name: "Adrian M.", avatar: "/images/friend4.jpg" },
-    { id: 5, name: "Sebastian S.", avatar: "/images/friend5.jpg" },
-    { id: 6, name: "Maja T.", avatar: "/images/friend6.jpg" },
-  ];
 
-  // Jeżeli nie ma jeszcze żadnych wydarzeń, pokaż „ekran powitalny” z dużymi kartami
   if (events.length === 0) {
     return (
       <Box sx={{ width: "100%" }}>
-        {/* Powitanie tuż pod headerem */}
         <Box sx={{ textAlign: "center", mb: 4 }}>
           <Typography
             variant="h4"
@@ -67,7 +90,10 @@ const Dashboard = () => {
           >
             {userName}, witaj na SplitBill!
           </Typography>
-          <Typography variant="subtitle1" sx={{ mt: 1, color: "rgba(255,255,255,0.7)" }}>
+          <Typography
+            variant="subtitle1"
+            sx={{ mt: 1, color: "rgba(255,255,255,0.7)" }}
+          >
             Nie masz jeszcze żadnych wydarzeń.
           </Typography>
         </Box>
@@ -78,16 +104,18 @@ const Dashboard = () => {
             flexDirection: { xs: "column", md: "row" },
             gap: 4,
             justifyContent: "center",
-            alignItems: "flex-start",
+            alignItems: "stretch",
           }}
         >
-          {/* Karta 1: Dołącz do istniejącego wydarzenia */}
           <Card
             sx={{
               backgroundColor: "#1e1e1e",
               color: "#ffffff",
               maxWidth: 345,
               flexGrow: 1,
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
               borderRadius: 2,
               boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
             }}
@@ -95,40 +123,44 @@ const Dashboard = () => {
             <CardMedia
               component="img"
               height="200"
-              image="/images/join_event.jpg"
+              image="/images/join_event.png"
               alt="Dołącz do istniejącego wydarzenia"
             />
-            <CardContent>
+            <CardContent sx={{ flexGrow: 1 }}>
               <Typography variant="h6" component="h2" sx={{ fontWeight: 600, mb: 1 }}>
                 Dołącz do istniejącego wydarzenia
               </Typography>
             </CardContent>
-            <CardActions sx={{ justifyContent: "center", mb: 1 }}>
+            <CardActions sx={{ justifyContent: "center" }}>
               <Button
                 variant="contained"
                 color="success"
                 onClick={() =>
-                  alert("W przyszłości otworzysz widok dołączania do istniejącego wydarzenia.")
+                  alert(
+                    "W przyszłości otworzysz widok dołączania do istniejącego wydarzenia."
+                  )
                 }
                 sx={{ textTransform: "none", borderRadius: "25px", px: 4 }}
               >
                 Dołącz do wydarzenia
               </Button>
             </CardActions>
-            <Box sx={{ textAlign: "center", mb: 2 }}>
-              <Typography variant="caption" component="p" sx={{ opacity: 0.6, color: "#cccccc" }}>
+            <Box sx={{ mt: "auto", textAlign: "center", pb: 2 }}>
+              <Typography variant="caption" sx={{ opacity: 0.6, color: "#cccccc" }}>
                 *Background designed by rawpixel.com / Freepik
               </Typography>
             </Box>
           </Card>
 
-          {/* Karta 2: Stwórz swoje wydarzenie */}
           <Card
             sx={{
               backgroundColor: "#1e1e1e",
               color: "#ffffff",
               maxWidth: 345,
               flexGrow: 1,
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
               borderRadius: 2,
               boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
             }}
@@ -136,15 +168,15 @@ const Dashboard = () => {
             <CardMedia
               component="img"
               height="200"
-              image="/images/create_event.jpg"
+              image="/images/create_event.png"
               alt="Stwórz swoje wydarzenie"
             />
-            <CardContent>
+            <CardContent sx={{ flexGrow: 1 }}>
               <Typography variant="h6" component="h2" sx={{ fontWeight: 600, mb: 1 }}>
                 Stwórz swoje wydarzenie
               </Typography>
             </CardContent>
-            <CardActions sx={{ justifyContent: "center", mb: 1 }}>
+            <CardActions sx={{ justifyContent: "center" }}>
               <Button
                 variant="contained"
                 color="success"
@@ -154,8 +186,8 @@ const Dashboard = () => {
                 Utwórz wydarzenie
               </Button>
             </CardActions>
-            <Box sx={{ textAlign: "center", mb: 2 }}>
-              <Typography variant="caption" component="p" sx={{ opacity: 0.6, color: "#cccccc" }}>
+            <Box sx={{ mt: "auto", textAlign: "center", pb: 2 }}>
+              <Typography variant="caption" sx={{ opacity: 0.6, color: "#cccccc" }}>
                 *Background designed by Freepik
               </Typography>
             </Box>
@@ -165,12 +197,12 @@ const Dashboard = () => {
     );
   }
 
-  // Jeżeli są już wydarzenia, pokaż standardowy widok z listami „trwające” i „zakończone”
+
   return (
     <Box sx={{ width: "100%" }}>
       {/* Powitanie */}
       <Box sx={{ textAlign: "center", mb: 4 }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 700, color: "#ffffff" }}>
+        <Typography variant="h4" sx={{ fontWeight: 700, color: "#ffffff" }}>
           Witaj na SplitBill!
         </Typography>
         <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", mt: 1 }}>
@@ -192,7 +224,7 @@ const Dashboard = () => {
           alignItems: "flex-start",
         }}
       >
-        {/* Panel główny z dwoma kolumnami */}
+        {/* Panel wydarzeń */}
         <Paper
           sx={{
             flexGrow: 2,
@@ -205,7 +237,7 @@ const Dashboard = () => {
             flexDirection: "column",
           }}
         >
-          {/* Nagłówki kolumn */}
+          {/* Nagłówki */}
           <Box
             sx={{
               display: "flex",
@@ -220,16 +252,22 @@ const Dashboard = () => {
                 Trwające wydarzenia
               </Typography>
             </Box>
-            <Box sx={{ flex: 1, p: 1.5, textAlign: "center", borderLeft: "1px solid #121212" }}>
+            <Box
+              sx={{
+                flex: 1,
+                p: 1.5,
+                textAlign: "center",
+                borderLeft: "1px solid #121212",
+              }}
+            >
               <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                 Zakończone wydarzenia
               </Typography>
             </Box>
           </Box>
 
-          {/* Lista wydarzeń */}
+          {/* Listy */}
           <Box sx={{ display: "flex", flexGrow: 1 }}>
-            {/* Trwające */}
             <Box sx={{ flex: 1, pr: 1 }}>
               {ongoingEvents.length === 0 ? (
                 <Typography sx={{ color: "rgba(255,255,255,0.6)", textAlign: "center", mt: 4 }}>
@@ -248,7 +286,9 @@ const Dashboard = () => {
                       borderBottom: "1px solid #2a2a2a",
                     }}
                   >
-                    <Typography sx={{ fontWeight: 500, color: "#ffffff" }}>{evt.name}</Typography>
+                    <Typography sx={{ fontWeight: 500, color: "#ffffff" }}>
+                      {evt.name}
+                    </Typography>
                     <Typography sx={{ fontSize: "0.875rem", color: "rgba(255,255,255,0.7)" }}>
                       {new Date(evt.date).toLocaleDateString()}
                     </Typography>
@@ -257,7 +297,6 @@ const Dashboard = () => {
               )}
             </Box>
 
-            {/* Zakończone */}
             <Box sx={{ flex: 1, pl: 1, borderLeft: "1px solid #2a2a2a" }}>
               {completedEvents.length === 0 ? (
                 <Typography sx={{ color: "rgba(255,255,255,0.6)", textAlign: "center", mt: 4 }}>
@@ -276,7 +315,9 @@ const Dashboard = () => {
                       borderBottom: "1px solid #2a2a2a",
                     }}
                   >
-                    <Typography sx={{ fontWeight: 500, color: "#ffffff" }}>{evt.name}</Typography>
+                    <Typography sx={{ fontWeight: 500, color: "#ffffff" }}>
+                      {evt.name}
+                    </Typography>
                     <Typography sx={{ fontSize: "0.875rem", color: "rgba(255,255,255,0.7)" }}>
                       {new Date(evt.date).toLocaleDateString()}
                     </Typography>
@@ -286,7 +327,7 @@ const Dashboard = () => {
             </Box>
           </Box>
 
-          {/* Przycisk na dole */}
+          {/* Akcje */}
           <Box sx={{ display: "flex", justifyContent: "space-between", mt: 3 }}>
             <Button
               variant="contained"
@@ -307,7 +348,7 @@ const Dashboard = () => {
           </Box>
         </Paper>
 
-        {/* Pasek z listą znajomych */}
+        {/* Pasek znajomych */}
         <Paper
           sx={{
             width: 240,
@@ -318,26 +359,54 @@ const Dashboard = () => {
             flexShrink: 0,
           }}
         >
-          <Typography variant="h6" sx={{ mb: 2 }}>
+          <Typography variant="h6" sx={{ mb: 1 }}>
             Znajomi
           </Typography>
-          <List sx={{ maxHeight: 400, overflowY: "auto", p: 0 }}>
-            {friends.map((f) => (
-              <ListItem key={f.id} sx={{ py: 1, px: 0 }}>
-                <ListItemAvatar>
-                  <Avatar src={f.avatar} alt={f.name} />
-                </ListItemAvatar>
-                <ListItemText primary={f.name} primaryTypographyProps={{ color: "#ffffff" }} />
-              </ListItem>
-            ))}
+          <List sx={{ maxHeight: 200, overflowY: "auto", p: 0 }}>
+            {friends.length === 0 ? (
+              <Typography sx={{ color: "rgba(255,255,255,0.6)", textAlign: "center", py: 2 }}>
+                Brak znajomych
+              </Typography>
+            ) : (
+              friends.map((f) => (
+                <ListItem key={f.uid} sx={{ py: 1, px: 0 }}>
+                  <Avatar sx={{ bgcolor: "#2ecc71", mr: 1 }}>
+                    {f.email.charAt(0).toUpperCase()}
+                  </Avatar>
+                  <ListItemText
+                    primary={f.email}
+                    secondary={f.name}
+                    primaryTypographyProps={{ color: "#ffffff", fontSize: "0.875rem" }}
+                    secondaryTypographyProps={{ color: "rgba(255,255,255,0.7)", fontSize: "0.75rem" }}
+                  />
+                </ListItem>
+              ))
+            )}
           </List>
-          <Divider sx={{ my: 1, borderColor: "#2a2a2a" }} />
+
+          <Divider sx={{ borderColor: "#2a2a2a", my: 2 }} />
+
+          <TextField
+            label="Email znajomego"
+            variant="outlined"
+            size="small"
+            fullWidth
+            value={newFriendEmail}
+            onChange={(e) => setNewFriendEmail(e.target.value)}
+            sx={{
+              mb: 1,
+              "& .MuiOutlinedInput-notchedOutline": { borderColor: "#555" },
+              "& .MuiInputBase-input": { color: "#fff" },
+              "& .MuiInputLabel-root": { color: "rgba(255,255,255,0.7)" },
+            }}
+          />
           <Button
             variant="contained"
-            color="success"
+            size="small"
             fullWidth
-            onClick={() => alert("W przyszłości otworzysz modal dodawania znajomego")}
-            sx={{ textTransform: "none", borderRadius: "25px", mt: 1 }}
+            disabled={adding}
+            onClick={handleAddFriend}
+            sx={{ textTransform: "none", borderRadius: "25px" }}
           >
             Dodaj znajomego
           </Button>

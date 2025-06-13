@@ -9,7 +9,7 @@ const RightPanel = () => {
       sx={{
         width: "100%",
         height: "100%",            
-        backgroundColor: "#2ea46b", 
+        backgroundColor: "#159976", 
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -39,16 +39,14 @@ const RightPanel = () => {
           to="/register"
           variant="contained"
           sx={{
-            bgcolor: "#6bfca1",
+            bgcolor: "#00ffbb",
             color: "#1a1a1a",
             borderRadius: "25px",
             width: "100%",
             py: 1.5,
             mb: 2,
             textDecoration: "none",
-            "&:hover": {
-              bgcolor: "#55e78c",
-            },
+
           }}
         >
           UTWÓRZ KONTO
@@ -65,15 +63,13 @@ const RightPanel = () => {
           to="/signin"
           variant="contained"
           sx={{
-            bgcolor: "#3fb96d",
-            color: "white",
+            bgcolor: "#00ffbb",
+            color: "black",
             borderRadius: "25px",
             width: "100%",
             py: 1.5,
             textDecoration: "none",
-            "&:hover": {
-              bgcolor: "#369d5f",
-            },
+
           }}
         >
           ZALOGUJ SIĘ

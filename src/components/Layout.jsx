@@ -1,4 +1,4 @@
-// src/components/Layout.jsx
+
 import React, { useState } from "react";
 import {
   AppBar,
@@ -28,11 +28,11 @@ const Header = () => {
   const navigate = useNavigate();
   const { logout } = useAuth();
 
-  // Hooki MUI do sprawdzenia breakpointów
+
   const theme = useTheme();
   const isSmUp = useMediaQuery(theme.breakpoints.up("sm"));
 
-  // Stan do otwierania/zamykania Drawer
+
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const handleLogout = () => {

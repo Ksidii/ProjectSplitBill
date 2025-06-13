@@ -1,4 +1,4 @@
-// src/pages/LoginScreen.jsx
+
 import React, { useEffect } from "react";
 import { Box } from "@mui/material";
 import LeftPanel from "../components/LeftPanel";
@@ -26,10 +26,7 @@ const LoginScreen = () => {
         overflow: "hidden",
       }}
     >
-      {/* LEWY PANEL:
-          - na mobile (xs): szerokość 100%, wysokość 50vh
-          - od md w górę: flex 6 (60% szerokości), wysokość 100%
-      */}
+
       <Box
         sx={{
           flex: { xs: "none", md: 6 },
@@ -40,10 +37,7 @@ const LoginScreen = () => {
         <LeftPanel />
       </Box>
 
-      {/* PRAWY PANEL:
-          - na mobile (xs): szerokość 100%, wysokość 50vh
-          - od md w górę: flex 4 (40% szerokości), wysokość 100%
-      */}
+
       <Box
         sx={{
           flex: { xs: "none", md: 4 },
