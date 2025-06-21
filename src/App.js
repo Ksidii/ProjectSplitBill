@@ -2,9 +2,10 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-import { AuthProvider } from "./context/AuthContext";
-import ProtectedRoute from "./context/ProtectedRoute";
-import { EventProvider } from "./context/EventContext";
+// Konteksty – zarządzanie autoryzacją i wydarzeniami
+import { AuthProvider } from "./context/AuthContext"; // dostarcza informacje o zalogowanym użytkowniku
+import ProtectedRoute from "./context/ProtectedRoute"; // komponent do ochrony tras (tylko po zalogowaniu)
+import { EventProvider } from "./context/EventContext"; // dostarcza informacje o eventach i znajomych
 
 import Layout from "./components/Layout";
 
@@ -20,9 +21,13 @@ import "./App.css";
 
 function App() {
   return (
+    // Dostarczenie kontekstu autoryzacji do całej aplikacji
     <AuthProvider>
+      // Dostarczenie kontekstu wydarzeń i znajomych
       <EventProvider>
+        // Umożliwienie obsługi tras za pomocą URL-a
         <BrowserRouter>
+          // Definicja tras (ścieżek URL)
           <Routes>
             {/* ---------------- */}
             {/* Strony publiczne */}
@@ -76,7 +81,8 @@ function App() {
               }
             />
 
-            {/* Wszelkie inne ścieżki → przekieruj do „/” */}
+            {/* ========== DOMYŚLNE PRZEKIEROWANIE ========== */}
+            {/* Wszelkie inne ścieżki → przekieruj do „/” - Jeżeli użytkownik wejdzie na nieznaną ścieżkę, zostanie przekierowany na stronę główną */}
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </BrowserRouter>
