@@ -1,20 +1,21 @@
-
+// Import bibliotek Firebase oraz zależności zewnętrznych
 const functions   = require("firebase-functions");
 const admin       = require("firebase-admin");
 const { Spanner } = require("@google-cloud/spanner");
 const { v4: uuid }= require("uuid");
 const cors        = require("cors")({ origin: true });
 
+// Inicjalizacja aplikacji Firebase Admin SDK
 admin.initializeApp();
 
-
+// Funkcja pomocnicza do połączenia z bazą danych Spanner
 function getDb() {
   const spanner  = new Spanner({ projectId: process.env.GCP_PROJECT });
   const inst     = spanner.instance("splitbill-instancja");
   return inst.database("splitbill_db");
 }
 
-
+// Zamiana adresów e-mail beneficjentów na UID-y Firebase
 async function normalizeBeneficiaries(beneficiaries = []) {
   const result = [];
   for (const id of beneficiaries) {
@@ -23,19 +24,19 @@ async function normalizeBeneficiaries(beneficiaries = []) {
       if (!user) throw new Error(`User ${id} not found`);
       result.push(user.uid);
     } else {
-      result.push(id);  
+      result.push(id);  // już jest UID
     }
   }
   return result;
 }
 
-
+// Endpoint: Pobieranie wydarzeń, w których użytkownik jest właścicielem lub uczestnikiem
 exports.getEvents = functions.https.onRequest((req, res) => {
   cors(req, res, async () => {
  
     if (req.method !== 'GET') return res.status(405).send('Only GET allowed');
 
-   
+   // Weryfikacja tokena JWT
     const token = (req.headers.authorization || '').split('Bearer ')[1] || '';
     if (!token) return res.status(401).send('No auth token');
 
@@ -47,6 +48,7 @@ exports.getEvents = functions.https.onRequest((req, res) => {
     }
     const uid = decoded.uid;
 
+    // Zapytanie SQL do pobrania wydarzeń
     /* pobieramy tylko wydarzenia, w których user jest ownerem LUB uczestnikiem */
     const sql = `
       SELECT e.EventId,
@@ -86,12 +88,13 @@ exports.getEvents = functions.https.onRequest((req, res) => {
 });
 
 
-
+// Endpoint: Tworzenie wydarzenia
 exports.createEvent = functions.https.onRequest((req, res) => {
   cors(req, res, async () => {
     if (req.method !== "POST") {
       return res.status(405).send("Only POST allowed");
     }
+    // Weryfikacja tokena JWT
     const token = (req.headers.authorization || "").split("Bearer ")[1] || "";
     if (!token) return res.status(401).send("No auth token");
     let decoded;
@@ -101,6 +104,7 @@ exports.createEvent = functions.https.onRequest((req, res) => {
       return res.status(401).send("Invalid token");
     }
 
+    // Walidacja danych wejściowych
     const { name, date, participants = [] } = req.body;
     if (!name) {
       return res.status(400).send("Missing name");
@@ -110,6 +114,7 @@ exports.createEvent = functions.https.onRequest((req, res) => {
     const eventId   = uuid();
     const createdAt = Spanner.timestamp(new Date());
 
+    // Zapis wydarzenia do bazy
     await db.table("Events").insert({
       EventId:   eventId,
       OwnerId:   decoded.uid,
@@ -118,6 +123,7 @@ exports.createEvent = functions.https.onRequest((req, res) => {
       CreatedAt: createdAt
     });
 
+    // Dodanie uczestników (jeśli są)
     if (participants.length) {
       const rows = participants.map(uid => ({
         EventId: eventId,
@@ -130,7 +136,7 @@ exports.createEvent = functions.https.onRequest((req, res) => {
   });
 });
 
-
+// Endpoint: Dodawanie wydatku
 exports.addExpense = functions.https.onRequest((req, res) => {
   cors(req, res, async () => {
     if (req.method !== 'POST') return res.status(405).send('Only POST allowed');
@@ -143,12 +149,14 @@ exports.addExpense = functions.https.onRequest((req, res) => {
     if (!decoded) return res.status(401).send('Invalid token');
 
 
+    // Walidacja danych
     const { eventId, name, amount, payerId, beneficiaries = [] } = req.body;
     if (!eventId || !name || !amount || !payerId)
       return res.status(400).send('Missing parameters');
     if (typeof amount !== 'number' || amount <= 0)
       return res.status(400).send('Invalid amount');
 
+     // Zamiana e-maili na UID-y
     let beneficiariesUid;                      
     try {
       beneficiariesUid = await normalizeBeneficiaries(beneficiaries);
@@ -162,6 +170,7 @@ exports.addExpense = functions.https.onRequest((req, res) => {
     const expenseId = uuid();
     const createdAt = Spanner.timestamp(new Date());
 
+    // Wstawienie rekordu wydatku
     await db.table('Expenses').insert({
       ExpenseId: expenseId,
       EventId:   eventId,
@@ -173,6 +182,7 @@ exports.addExpense = functions.https.onRequest((req, res) => {
       CreatedAt: createdAt,
     });
 
+    // Wstawienie użytkowników jako beneficjentów wydatku
     if (beneficiariesUid.length) {
       const rows = beneficiariesUid.map(uid => ({
         EventId:   eventId,
@@ -197,12 +207,17 @@ exports.addExpense = functions.https.onRequest((req, res) => {
   });
 });
 
+// Funkcja zmienia status wydarzenia na "LOCKED"
 exports.lockEvent = functions.https.onRequest((req, res) => {
   cors(req, res, async () => {
+    // Sprawdzenie metody HTTP
     if (req.method !== "POST") return res.status(405).send("Only POST");
+    // Autoryzacja – wyciągnięcie tokenu z nagłówków
     const token = (req.headers.authorization || "").split("Bearer ")[1] || "";
     const { eventId } = req.body;
+     // Weryfikacja tokenu
     await admin.auth().verifyIdToken(token);  
+    // Aktualizacja statusu eventu w bazie
     await getDb().table("Events")
       .update({ EventId: eventId, Status: "LOCKED" });
     res.json({ success: true });
@@ -213,10 +228,12 @@ exports.lockEvent = functions.https.onRequest((req, res) => {
 
 
 
-
+// Funkcja pobiera listę znajomych aktualnie zalogowanego użytkownika
 exports.getFriends = functions.https.onRequest((req, res) => {
   cors(req, res, async () => {
+    // Sprawdzenie metody
     if (req.method !== "GET") return res.status(405).send("Only GET allowed");
+     // Pobranie i weryfikacja tokenu autoryzacyjnego
     const token = (req.headers.authorization||"").split("Bearer ")[1] || "";
     if (!token) return res.status(401).send("No auth token");
     let decoded;
@@ -228,6 +245,7 @@ exports.getFriends = functions.https.onRequest((req, res) => {
 
 
     const db = getDb();
+    // SQL do pobrania UID znajomych
     const sql = `
       SELECT FriendId
         FROM Friends
@@ -235,11 +253,14 @@ exports.getFriends = functions.https.onRequest((req, res) => {
     `;
     const [rows] = await db.run({ sql, params: { uid: decoded.uid } });
     const uids = rows.map(r => r.toJSON().FriendId);
+    // Jeśli użytkownik nie ma żadnych znajomych
     if (uids.length === 0) return res.json([]);
 
 
+    // Pobranie danych użytkowników po UID
     const list = await admin.auth().getUsers(uids.map(uid=>({ uid })));
 
+    // Konwersja na tablicę obiektów
     const friends = list.users.map(u => ({
       uid:   u.uid,
       email: u.email,
@@ -249,11 +270,12 @@ exports.getFriends = functions.https.onRequest((req, res) => {
   });
 });
 
-
+// Funkcja dodaje znajomego do listy
 exports.addFriend = functions.https.onRequest((req, res) => {
   cors(req, res, async () => {
     if (req.method !== "POST") return res.status(405).send("Only POST allowed");
 
+    // Autoryzacja
     const idToken = (req.headers.authorization || "").split("Bearer ")[1] || "";
     if (!idToken) return res.status(401).send("No auth token");
     let decoded;
@@ -264,15 +286,18 @@ exports.addFriend = functions.https.onRequest((req, res) => {
     }
 
 
+    // Obsługa sytuacji, gdzie obiekt ma zagnieżdżony email
     let { friendEmail } = req.body;
     if (friendEmail && typeof friendEmail === 'object' && friendEmail.friendEmail) {
       friendEmail = friendEmail.friendEmail;
     }
+    // Walidacja parametru email
     if (!friendEmail || typeof friendEmail !== 'string') {
       return res.status(400).send("Missing or invalid friendEmail");
     }
 
 
+    // Pobieranie użytkownika po emailu
     let friendUser;
     try {
       friendUser = await admin.auth().getUserByEmail(friendEmail);
@@ -280,6 +305,7 @@ exports.addFriend = functions.https.onRequest((req, res) => {
       return res.status(404).send("User with that email not found");
     }
 
+    // Symetryczne zapisywanie relacji znajomości
     const uid1 = decoded.uid;
     const uid2 = friendUser.uid;
     const COMMIT_TS = Spanner.COMMIT_TIMESTAMP;
@@ -296,6 +322,7 @@ exports.addFriend = functions.https.onRequest((req, res) => {
 });
 
 
+// Dodanie uczestnika do wydarzenia
 exports.addParticipant = functions.https.onRequest((req, res) => {
   cors(req, res, async () => {
     if (req.method !== "POST")
@@ -311,6 +338,7 @@ exports.addParticipant = functions.https.onRequest((req, res) => {
       return res.status(401).send("Invalid token");
     }
 
+    // Walidacja danych wejściowych
     const { eventId, userId } = req.body;
     if (!eventId || !userId)
       return res.status(400).send("Missing eventId or userId");
@@ -325,6 +353,7 @@ exports.addParticipant = functions.https.onRequest((req, res) => {
   });
 });
 
+// Pobranie szczegółów wydarzenia: uczestnicy i wydatki
 exports.getEventDetails = functions.https.onRequest((req, res) => {
   cors(req, res, async () => {
     if (req.method !== "GET") return res.status(405).send("Only GET allowed");
@@ -344,7 +373,8 @@ exports.getEventDetails = functions.https.onRequest((req, res) => {
 
     const db = getDb();
 
- 
+
+    // 1. Wczytaj wydarzenie
     const [eventRows] = await db.run({
       sql: `SELECT * FROM Events WHERE EventId = @eventId`,
       params: { eventId }
@@ -353,14 +383,16 @@ exports.getEventDetails = functions.https.onRequest((req, res) => {
     if (eventRows.length === 0) return res.status(404).send("Event not found");
     const event = eventRows[0].toJSON();
 
-  
+
+    // 2. Wczytaj uczestników
     const [participantsRows] = await db.run({
       sql: `SELECT UserId FROM Participants WHERE EventId = @eventId`,
       params: { eventId }
     });
     const participants = participantsRows.map(r => r.toJSON().UserId);
 
-  
+
+    // 3. Wczytaj wydatki i beneficjentów
     const [expenseRows] = await db.run({
       sql: `
         SELECT e.ExpenseId, e.Amount, e.PaidBy, e.Status, e.isPaid, e.Name,
@@ -373,6 +405,7 @@ exports.getEventDetails = functions.https.onRequest((req, res) => {
       params: { eventId }
     });
 
+    // Grupowanie wydatków i ich beneficjentów
     const expensesMap = {};
     expenseRows.forEach(r => {
       const row = r.toJSON();
@@ -404,18 +437,20 @@ exports.getEventDetails = functions.https.onRequest((req, res) => {
   });
 });
 
+// Oznacza wydatek jako zapłacony przez aktualnego użytkownika
 exports.markExpensePaid = functions.https.onRequest((req, res) => {
   cors(req, res, async () => {
     if (req.method !== 'POST') return res.status(405).send('Only POST');
 
     const token = (req.headers.authorization || '').split('Bearer ')[1] || '';
     const { eventId, expenseId } = req.body;
-    if (!eventId || !expenseId) return res.status(400).send('Missing params');
+    if (!eventId || !expenseId) return res.status(400).send('Missing params'); // Sprawdzenie parametrów wejściowych
 
 
     const { uid } = await admin.auth().verifyIdToken(token);
     const db = getDb();
 
+    // Oznaczenie udziału użytkownika jako zapłaconego
     try {
       await db.table('ExpenseUsage').update({
         EventId:   eventId,
@@ -434,6 +469,7 @@ exports.markExpensePaid = functions.https.onRequest((req, res) => {
              WHERE EventId=@e AND ExpenseId=@x AND IsPaid=FALSE`,
       params: { e: eventId, x: expenseId },
     });
+    // Jeśli tak, aktualizuj status wydatku
     if (Number(left[0].toJSON().cnt) === 0) {
       await db.table('Expenses').update({
         EventId:   eventId,
