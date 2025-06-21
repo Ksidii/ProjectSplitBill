@@ -1,62 +1,68 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { auth } from "../firebase";
 
+// Tworzymy nowy kontekst do obsługi wydarzeń
 const EventContext = createContext();
+// Udostępniamy hook do użycia EventContext w komponentach
 export const useEvents = () => useContext(EventContext);
 
 /* ────────────────────────────────────────────────────────── */
 /*  helper – pojedyncze wywołanie chmury                     */
+/*  Funkcja pomocnicza – tworzy funkcję do wywołań endpointów */
+/*  Firebase Functions z autoryzacją przez token użytkownika  */
 const callFnFactory = currentUser => async (path, body = null, method = "POST") => {
-  const token = await currentUser.getIdToken();
-  const url   = `https://us-central1-splitbill-461116.cloudfunctions.net/${path}`;
+  const token = await currentUser.getIdToken(); // Pobieramy token JWT do autoryzacji
+  const url   = `https://us-central1-splitbill-461116.cloudfunctions.net/${path}`; // Adres funkcji chmurowej (Firebase Functions)
 
-  const opts  = { method, headers: { Authorization: `Bearer ${token}` } };
+  const opts  = { method, headers: { Authorization: `Bearer ${token}` } }; // Dodanie tokena w nagłówku jako autoryzacja
   if (body !== null) {
     opts.headers["Content-Type"] = "application/json";
-    opts.body = JSON.stringify(body);
+    opts.body = JSON.stringify(body); // Jeśli jest body – przekazujemy jako JSON
   }
 
-  const res = await fetch(url, opts);
+  const res = await fetch(url, opts); // Wysyłamy żądanie
   if (!res.ok) {
-    const txt = await res.text();
+    const txt = await res.text(); // W przypadku błędu — odczytaj odpowiedź serwera
     throw new Error(`Server error (${res.status}): ${txt}`);
   }
-  return res.json();
+  return res.json(); // Zwracamy dane w formacie JSON
 };
 /* ────────────────────────────────────────────────────────── */
-
+// Komponent provider – udostępnia dane i akcje związane z wydarzeniami w całej aplikacji
 export const EventProvider = ({ children }) => {
   const [events, setEvents]   = useState([]);   // wszystkie eventy
   const [friends, setFriends] = useState([]);   // lista znajomych
-  const [eventsLoaded, setEventsLoaded] = useState(false);
+  const [eventsLoaded, setEventsLoaded] = useState(false); // Flaga: czy wydarzenia już pobrano
 
-  const currentUser     = auth.currentUser;
-  const isAuthenticated = !!currentUser;
-  const callFn          = callFnFactory(currentUser);
+  const currentUser     = auth.currentUser; // Aktualnie zalogowany użytkownik Firebase
+  const isAuthenticated = !!currentUser; // true jeśli użytkownik jest zalogowany
+  const callFn          = callFnFactory(currentUser); // Tworzymy funkcję do autoryzowanych wywołań HTTP
 
-  /* ---------- pomocniczo: zamiana uid ↔︎ email ---------- */
+  /* Pomocnicza funkcja do zamiany UID na e-mail użytkownika */
   const resolveName = uidOrEmail => {
     if (!uidOrEmail) return "";
-    if (uidOrEmail.includes("@")) return uidOrEmail;       // to już e-mail
+    if (uidOrEmail.includes("@")) return uidOrEmail;       // Jeśli już e-mail — zwracamy
 
-    const friend = friends.find(f => f.uid === uidOrEmail);
+    const friend = friends.find(f => f.uid === uidOrEmail); // Szukamy wśród znajomych
     if (friend) return friend.email;
 
     for (const ev of events) {
-      const p = ev.participants?.find(x => x.id === uidOrEmail);
+      const p = ev.participants?.find(x => x.id === uidOrEmail); // Szukamy po wydarzeniach
       if (p) return p.name;
     }
-    return uidOrEmail;                                     // fallback
+    return uidOrEmail;  // fallback, gdy nie znaleziono nazwiska
   };
   /* ------------------------------------------------------ */
 
-  /* ========== 1. pobranie wydarzeń ========== */
+  /* ========== 1. Pobieranie wydarzeń po zalogowaniu użytkownika ========== */
+  // Efekt pobierający wydarzenia z backendu po zalogowaniu użytkownika
   useEffect(() => {
     if (!isAuthenticated) return;
     (async () => {
       try {
-        const data = await callFn("getEvents", null, "GET");
+        const data = await callFn("getEvents", null, "GET"); // Pobieranie listy wydarzeń
 
+        // Transformacja danych z backendu na format wewnętrzny aplikacji
         setEvents(data.map(ev => ({
           id:   ev.eventId,
           name: ev.name,
@@ -81,12 +87,12 @@ export const EventProvider = ({ children }) => {
       } catch (err) {
         console.error("Nie udało się wczytać eventów:", err);
       } finally {
-        setEventsLoaded(true);
+        setEventsLoaded(true); // Ustawiamy flagę, że pobrano
       }
     })();
   }, [isAuthenticated]);    // <- tylko raz po zalogowaniu
 
-  /* ========== 2. pobranie znajomych ========== */
+  /* ========== 2. Pobieranie listy znajomych użytkownika ========== */
   useEffect(() => {
     if (!isAuthenticated) return;
     (async () => {
@@ -101,7 +107,7 @@ export const EventProvider = ({ children }) => {
 
   /* ================= akcje CRUD ================= */
 
-  /* --- createEvent ----------------------------- */
+  /* Tworzenie nowego wydarzenia */
   const createEvent = async ({ name, date, participants = [] }) => {
     const allParticipants = [
       currentUser.email,
@@ -119,11 +125,11 @@ export const EventProvider = ({ children }) => {
       expenses: [],
     };
 
-    setEvents(prev => [...prev, newEvent]);
+    setEvents(prev => [...prev, newEvent]); // Dodanie do lokalnego stanu
     return newEvent.id;
   };
 
-  /* --- addExpense ----------------------------- */
+  /* --- Dodawanie nowego wydatku do wydarzenia ----------------------------- */
   const addExpense = async (eventId, { name, amount, payer, beneficiaries = [] }) => {
     const ex = await callFn("addExpense", {
       eventId,
@@ -152,13 +158,13 @@ export const EventProvider = ({ children }) => {
     }));
   };
 
-  /* --- addFriend ------------------------------ */
+  /* --- Dodanie znajomego ------------------------------ */
   const addFriend = async friendEmail => {
     await callFn("addFriend", { friendEmail });
-    setFriends(await callFn("getFriends", null, "GET"));
+    setFriends(await callFn("getFriends", null, "GET")); // Odświeżenie listy znajomych
   };
 
-  /* --- addParticipant ------------------------- */
+  /* --- Dodanie uczestnika do wydarzenia ------------------------- */
   const addParticipant = async (eventId, user) => {
     await callFn("addParticipant", { eventId, userId: user.uid });
     setEvents(prev => prev.map(ev =>
@@ -168,7 +174,7 @@ export const EventProvider = ({ children }) => {
     ));
   };
 
-  /* --- loadEventDetails (pełny refresh) ------- */
+  /* --- Odświeżenie szczegółów wydarzenia (np. po powrocie na stronę) (pełny refresh) ------- */
   const loadEventDetails = async eventId => {
     const data = await callFn(`getEventDetails?eventId=${eventId}`, null, "GET");
 
@@ -200,7 +206,7 @@ export const EventProvider = ({ children }) => {
     }));
   };
 
-  /* --- lockEvent ------------------------------ */
+  /* --- Zablokowanie wydarzenia (np. po jego zakończeniu) ------------------------------ */
   const lockEvent = async eventId => {
     await callFn("lockEvent", { eventId });
     setEvents(prev => prev.map(ev =>
@@ -208,7 +214,7 @@ export const EventProvider = ({ children }) => {
     ));
   };
 
-  /* --- markExpensePaid (pełny koszt) ---------- */
+  /* --- Oznaczenie wydatku jako w pełni opłaconego (wszyscy spłacili) ---------- */
   const markExpensePaid = async (eventId, expenseId) => {
     await callFn("markExpensePaid", { eventId, expenseId });
     setEvents(prev => prev.map(ev => {
@@ -223,7 +229,7 @@ export const EventProvider = ({ children }) => {
     }));
   };
 
-  /* --- payMyShare (pojedynczy udział) --------- */
+  /* --- Użytkownik spłaca swój udział we wspólnym wydatku --------- */
   const payMyShare = async (eventId, expenseId) => {
     await callFn("markExpensePaid", { eventId, expenseId });
     setEvents(prev => prev.map(ev => {
@@ -248,7 +254,7 @@ export const EventProvider = ({ children }) => {
     }));
   };
 
-  /* ========== eksport do Provider’a ========== */
+  /* ========== Udostępniamy wszystkie dane i akcje poprzez kontekst / eksport do Provider’a ========== */
   return (
     <EventContext.Provider
       value={{
